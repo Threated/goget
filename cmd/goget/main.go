@@ -8,6 +8,7 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+
 func main() {
 	app := &cli.App{
 		Name:           "goget",
@@ -17,7 +18,7 @@ func main() {
 			&cli.PathFlag{
 				TakesFile:   false,
 				Name:        "outputDir",
-				Aliases:     []string{"o"},
+                Aliases:     []string{"o", "out"},
 				Value:       ".",
 				Usage:       "Dir to download into",
 				DefaultText: ".",
@@ -25,8 +26,9 @@ func main() {
 			&cli.IntFlag{
 				Name:        "depth",
 				Aliases:     []string{"d"},
-				Usage:       "Number of recursions to download subfolders",
+				Usage:       "Number of recursions for subfolders",
 				DefaultText: "all subfolders",
+                Value: -1,
 			},
 			&cli.BoolFlag{
 				Name:    "verbose",
@@ -40,7 +42,7 @@ func main() {
 				return err
 			}
 			results := make(chan utils.Result)
-			go utils.Download(info, results)
+			go utils.Download(info, cCtx.Path("outputDir"), cCtx.Int("depth"), results)
 
 			// awaiting results from channel and loging them
 			for result := range results {

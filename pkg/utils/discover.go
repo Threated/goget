@@ -75,7 +75,7 @@ type FileInfo struct {
 }
 
 func (file *FileInfo) String() string {
-    return fmt.Sprintf("FileInfo { Name: %s, GitUrl: %s, Type: %s }", file.Name, file.GitUrl, string(file.Type))
+    return fmt.Sprintf("%s: %s from GitUrl: %s", string(file.Type), file.Name, file.GitUrl)
 }
 
 func readJsonInto(body io.ReadCloser, out any) error {
@@ -137,7 +137,8 @@ type Result struct {
 	Err     error
 }
 
-func DownloadFiles(files []FileInfo, out, baseUrl string, results chan Result) {
+func DownloadFiles(files []FileInfo, out, baseUrl string, depth int, results chan Result) {
+    os.MkdirAll(out, os.ModePerm)
 	var wg sync.WaitGroup
 	for _, file := range files {
 		switch file.Type {
@@ -148,6 +149,9 @@ func DownloadFiles(files []FileInfo, out, baseUrl string, results chan Result) {
 				results <- Result{&theFile, DownloadBlob(theFile.GitUrl, filePath)}
 			}(file, path.Join(out, file.Name))
 		case Dir:
+            if depth == 0 {
+                continue
+            }
 			newUrl, err := url.JoinPath(baseUrl, file.Name)
 			if err != nil {
 				results <- Result{&file, err}
@@ -161,7 +165,7 @@ func DownloadFiles(files []FileInfo, out, baseUrl string, results chan Result) {
 			wg.Add(1)
 			go func(moreFiles []FileInfo, outFilePath, newBaseUrl string) {
 				defer wg.Done()
-				DownloadFiles(moreFiles, outFilePath, newBaseUrl, results)
+				DownloadFiles(moreFiles, outFilePath, newBaseUrl, depth - 1, results)
 			}(newFiles, path.Join(out, file.Name), newUrl)
 		default:
 			results <- Result{&file, fmt.Errorf("Unknown response type %s", file.Type)}
@@ -170,7 +174,7 @@ func DownloadFiles(files []FileInfo, out, baseUrl string, results chan Result) {
 	wg.Wait()
 }
 
-func Download(subRepo *RepoInfo, results chan Result) {
+func Download(subRepo *RepoInfo, outDir string, depth int, results chan Result) {
 	baseUrl := subRepo.Url()
 
 	if subRepo.UrlType == Blob {
@@ -179,15 +183,16 @@ func Download(subRepo *RepoInfo, results chan Result) {
             &FileInfo {
                 Name: name,
                 Type: File,
+                GitUrl: baseUrl,
             },
-            DownloadBlob(baseUrl, name),
+            DownloadBlob(baseUrl, path.Join(outDir, name)),
         }
 	} else if subRepo.UrlType == Tree {
 		files, err := DirInfoFromUrl(baseUrl)
 		if err != nil {
 			results <- Result{nil, err}
 		} else {
-			DownloadFiles(files, ".", baseUrl, results)
+			DownloadFiles(files, outDir, baseUrl, depth, results)
 		}
 	} else {
 		results <- Result {
