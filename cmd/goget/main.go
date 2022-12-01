@@ -19,9 +19,9 @@ func main() {
 				TakesFile:   false,
 				Name:        "outputDir",
                 Aliases:     []string{"o", "out"},
-				Value:       ".",
 				Usage:       "Dir to download into",
-				DefaultText: ".",
+				DefaultText: "current directory",
+                Value:       ".",
 			},
 			&cli.IntFlag{
 				Name:        "depth",
@@ -41,8 +41,8 @@ func main() {
 			if err != nil {
 				return err
 			}
-			results := make(chan utils.Result)
-			go utils.Download(info, cCtx.Path("outputDir"), cCtx.Int("depth"), results)
+
+            results := utils.Download(info, cCtx.Path("outputDir"), cCtx.Int("depth"))
 
 			// awaiting results from channel and loging them
 			for result := range results {

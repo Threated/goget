@@ -137,7 +137,7 @@ type Result struct {
 	Err     error
 }
 
-func DownloadFiles(files []FileInfo, out, baseUrl string, depth int, results chan Result) {
+func downloadFiles(files []FileInfo, out, baseUrl string, depth int, results chan Result) {
     os.MkdirAll(out, os.ModePerm)
 	var wg sync.WaitGroup
 	for _, file := range files {
@@ -165,7 +165,7 @@ func DownloadFiles(files []FileInfo, out, baseUrl string, depth int, results cha
 			wg.Add(1)
 			go func(moreFiles []FileInfo, outFilePath, newBaseUrl string) {
 				defer wg.Done()
-				DownloadFiles(moreFiles, outFilePath, newBaseUrl, depth - 1, results)
+				downloadFiles(moreFiles, outFilePath, newBaseUrl, depth - 1, results)
 			}(newFiles, path.Join(out, file.Name), newUrl)
 		default:
 			results <- Result{&file, fmt.Errorf("Unknown response type %s", file.Type)}
@@ -174,31 +174,37 @@ func DownloadFiles(files []FileInfo, out, baseUrl string, depth int, results cha
 	wg.Wait()
 }
 
-func Download(subRepo *RepoInfo, outDir string, depth int, results chan Result) {
-	baseUrl := subRepo.Url()
+func Download(subRepo *RepoInfo, outDir string, depth int) chan Result {
+    results := make(chan Result)
 
-	if subRepo.UrlType == Blob {
-        name := subRepo.Path[len(subRepo.Path)-1]
-		results <- Result {
-            &FileInfo {
-                Name: name,
-                Type: File,
-                GitUrl: baseUrl,
-            },
-            DownloadBlob(baseUrl, path.Join(outDir, name)),
+    go func() {
+        baseUrl := subRepo.Url()
+        if subRepo.UrlType == Blob {
+            os.MkdirAll(outDir, os.ModePerm)
+            name := subRepo.Path[len(subRepo.Path)-1]
+            results <- Result {
+                &FileInfo {
+                    Name: name,
+                    Type: File,
+                    GitUrl: baseUrl,
+                },
+                DownloadBlob(baseUrl, path.Join(outDir, name)),
+            }
+        } else if subRepo.UrlType == Tree {
+            files, err := DirInfoFromUrl(baseUrl)
+            if err != nil {
+                results <- Result{nil, err}
+            } else {
+                downloadFiles(files, outDir, baseUrl, depth, results)
+            }
+        } else {
+            results <- Result {
+                nil,
+                fmt.Errorf("Unknown git url schema expected blob or tree got %s", string(subRepo.UrlType)),
+            }
         }
-	} else if subRepo.UrlType == Tree {
-		files, err := DirInfoFromUrl(baseUrl)
-		if err != nil {
-			results <- Result{nil, err}
-		} else {
-			DownloadFiles(files, outDir, baseUrl, depth, results)
-		}
-	} else {
-		results <- Result {
-            nil,
-            fmt.Errorf("Unknown git url schema expected blob or tree got %s", string(subRepo.UrlType)),
-        }
-	}
-	close(results)
+        close(results)
+    }()
+
+    return results
 }
