@@ -147,3 +147,4 @@ func Download(subRepo *RepoInfo, outDir string, depth int) chan Result {
 
 	return results
 }
+
