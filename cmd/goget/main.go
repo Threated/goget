@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -42,13 +43,18 @@ func main() {
 				return err
 			}
 
+            token, err := ReadGitToken()
+            if err == nil && token != "" {
+                info.ApiToken = token
+            }
+
             results := utils.Download(info, cCtx.Path("outputDir"), cCtx.Int("depth"))
 
 			// awaiting results from channel and loging them
 			for result := range results {
 				if result.Err != nil {
 					if result.Context != nil {
-						println("Error downloading " + result.Context.String())
+						log.Fatalln("Error downloading " + result.Context.String())
 					}
 					return result.Err
 				}
@@ -58,6 +64,41 @@ func main() {
 			}
 			return nil
 		},
+        Commands: []*cli.Command{
+            {
+                Name: "token",
+                Usage: "manage api tokens",
+                Action: func(cCtx *cli.Context) error {
+                    token, err := ReadGitToken()
+                    if err != nil {
+                        return err
+                    }
+
+                    if token == "" {
+                        fmt.Println("No token set")
+                    }
+
+                    fmt.Println(token)
+                    return nil
+                },
+                Subcommands: []*cli.Command{
+                    {
+                        Name: "add",
+                        Usage: "add github api token",
+                        Action: func(cCtx *cli.Context) error {
+                            return WriteGitToken(cCtx.Args().First()) 
+                        },
+                    },
+                    {
+                        Name: "remove",
+                        Usage: "remove github api token",
+                        Action: func(cCtx *cli.Context) error {
+                            return WriteGitToken("")
+                        },
+                    },
+                },
+            },
+        },
 	}
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
